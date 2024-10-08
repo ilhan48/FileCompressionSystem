@@ -64,5 +64,3 @@ For any inquiries or support, feel free to contact the project maintainer:
 - **Email:** [email@example.com](mailto:email@example.com)
 
 ---
-
-Feel free to customize this template as needed for your project's specifics and additional details.
