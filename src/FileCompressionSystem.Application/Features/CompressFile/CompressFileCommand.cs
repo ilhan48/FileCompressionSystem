@@ -11,6 +11,5 @@ public class CompressFileCommand : IRequest<CompressFileResult>
 public class CompressFileResult
 {
     public string FileName { get; set; }
-    public byte[] Content { get; set; }
-    public string ContentType { get; set; }
+    public Stream CompressedStream { get; set; }
 }

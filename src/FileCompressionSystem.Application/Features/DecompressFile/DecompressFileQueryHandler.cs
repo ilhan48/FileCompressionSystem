@@ -15,24 +15,23 @@ public class DecompressFileQueryHandler : IRequestHandler<DecompressFileQuery, D
 
     public async Task<DecompressFileResult> Handle(DecompressFileQuery request, CancellationToken cancellationToken)
     {
-        var compressedContent = await _fileStorageService.GetCompressedFileAsync(request.FileName);
+        var compressedStream = await _fileStorageService.GetCompressedFileStreamAsync(request.FileName);
+        var decompressedStream = new MemoryStream();
 
-        using var compressedStream = new MemoryStream(compressedContent);
-        using var decompressedStream = new MemoryStream();
-        using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+        using (var decompressionStream = new GZipStream(compressedStream, CompressionMode.Decompress))
         {
-            await gzipStream.CopyToAsync(decompressedStream);
+            await decompressionStream.CopyToAsync(decompressedStream, 81920, cancellationToken);
         }
 
-        var decompressedContent = decompressedStream.ToArray();
+        decompressedStream.Position = 0;
         var originalFileName = Path.GetFileNameWithoutExtension(request.FileName);
 
         return new DecompressFileResult
         {
             FileName = originalFileName,
-            Content = decompressedContent,
-            ContentType = "application/octet-stream"
+            DecompressedStream = decompressedStream
         };
     }
 }
+
 

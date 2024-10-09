@@ -1,97 +1,51 @@
 ﻿using FileCompressionSystem.Application.Common.Interfaces;
-using System.IO.Compression;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace FileCompressionSystem.Infrastructure.Services;
 
 public class FileStorageService : IFileStorageService
 {
-    private readonly string _storagePath = Path.Combine(Directory.GetCurrentDirectory(), "CompressedFiles");
+    private readonly string _storagePath;
+    private readonly ILogger<FileStorageService> _logger;
 
-    public FileStorageService()
+    public FileStorageService(IConfiguration configuration, ILogger<FileStorageService> logger)
     {
+        _storagePath = configuration["StoragePath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "CompressedFiles");
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
         if (!Directory.Exists(_storagePath))
         {
             Directory.CreateDirectory(_storagePath);
         }
     }
 
-    public async Task<string> SaveCompressedFileAsync(byte[] fileContent, string fileName)
+    public async Task<Stream> GetCompressedFileStreamAsync(string fileName)
     {
-        var originalExtension = Path.GetExtension(fileName);
-        if (originalExtension == ".zip")
+        var filePath = Path.Combine(_storagePath, fileName);
+        if (!File.Exists(filePath))
         {
-            throw new ArgumentException("The file to be compressed cannot have a .zip extension.");
+            _logger.LogWarning("File not found: {FilePath}", filePath);
+            throw new FileNotFoundException("The specified file does not exist.", filePath);
         }
 
-        var zipFileName = $"{Path.GetFileNameWithoutExtension(fileName)}.zip";
-        var zipFilePath = Path.Combine(_storagePath, zipFileName);
-
-        using (var archive = ZipFile.Open(zipFilePath, ZipArchiveMode.Create))
-        {
-            var zipEntry = archive.CreateEntry(fileName);
-            using (var entryStream = zipEntry.Open())
-            {
-                await entryStream.WriteAsync(fileContent, 0, fileContent.Length);
-            }
-        }
-
-        return zipFileName;
+        return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
     }
 
-    public async Task<byte[]> GetCompressedFileAsync(string fileName)
+    public async Task SaveCompressedFileAsync(Stream compressedStream, string fileName)
     {
-        if (Path.GetExtension(fileName) != ".zip")
+        var filePath = Path.Combine(_storagePath, fileName);
+        try
         {
-            fileName = $"{Path.GetFileNameWithoutExtension(fileName)}.zip";
-        }
-
-        var zipFilePath = Path.Combine(_storagePath, fileName);
-
-        if (!File.Exists(zipFilePath))
-        {
-            throw new FileNotFoundException("The specified zip file does not exist.", zipFilePath);
-        }
-
-        using (var archive = ZipFile.OpenRead(zipFilePath))
-        {
-            var zipEntry = archive.Entries.FirstOrDefault();
-            if (zipEntry == null)
+            using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
             {
-                throw new InvalidDataException("The zip file is empty.");
-            }
-
-            using (var entryStream = zipEntry.Open())
-            using (var resultStream = new MemoryStream())
-            {
-                await entryStream.CopyToAsync(resultStream);
-                return resultStream.ToArray();
+                await compressedStream.CopyToAsync(fileStream);
             }
         }
-    }
-
-    public string GetOriginalFileName(string zipFileName)
-    {
-        if (Path.GetExtension(zipFileName) != ".zip")
+        catch (Exception ex)
         {
-            zipFileName = $"{Path.GetFileNameWithoutExtension(zipFileName)}.zip";
-        }
-
-        var zipFilePath = Path.Combine(_storagePath, zipFileName);
-
-        if (!File.Exists(zipFilePath))
-        {
-            throw new FileNotFoundException("The specified zip file does not exist.", zipFilePath);
-        }
-
-        using (var archive = ZipFile.OpenRead(zipFilePath))
-        {
-            var zipEntry = archive.Entries.FirstOrDefault();
-            if (zipEntry == null)
-            {
-                throw new InvalidDataException("The zip file is empty.");
-            }
-
-            return zipEntry.FullName;
+            _logger.LogError(ex, "An error occurred while saving the compressed file: {FilePath}", filePath);
+            throw;
         }
     }
 }
