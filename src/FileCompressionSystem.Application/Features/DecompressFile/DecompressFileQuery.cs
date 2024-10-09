@@ -10,6 +10,5 @@ public class DecompressFileQuery : IRequest<DecompressFileResult>
 public class DecompressFileResult
 {
     public string FileName { get; set; }
-    public byte[] Content { get; set; }
-    public string ContentType { get; set; }
+    public Stream DecompressedStream { get; set; }
 }
